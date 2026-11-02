@@ -207,31 +207,41 @@ const Sim = (() => {
     return Math.abs(r) > Math.abs(l) ? (l > 0 ? 'st_curveL' : 'st_curveR') : (l > 0 ? 'st_curveR' : 'st_curveL');
   }
 
-  function motorPanel(ctx) {
+  function motorPanel(ctx, linkedByDefault) {
     const { t } = ctx;
+    const slider = (id, label) => `<div class="mslider"><label>${t(label)}</label><output id="${id}v">0</output>
+      <input type="range" id="${id}" min="-100" max="100" step="10" value="0" orient="vertical">
+      <div class="pm"><button class="pmb" data-for="${id}" data-d="-10" aria-label="minus">−</button><button class="pmb" data-for="${id}" data-d="10" aria-label="plus">+</button></div></div>`;
     ctx.panel.innerHTML = `
-      <div class="motors" dir="ltr">
-        <div class="mslider"><label>${t('leftMotor')}</label><output id="lv">0</output>
-          <input type="range" id="lm" min="-100" max="100" step="10" value="0" orient="vertical"></div>
-        <div class="mbot">${ROBOT_FACE}</div>
-        <div class="mslider"><label>${t('rightMotor')}</label><output id="rv">0</output>
-          <input type="range" id="rm" min="-100" max="100" step="10" value="0" orient="vertical"></div>
-      </div>
-      <div class="explain" id="explain">${t('st_stop')}</div>
-      <div class="row"><button class="btn run" id="stopM">${t('stopMotors')}</button><button class="btn" id="resetB">${t('resetBot')}</button></div>`;
-    const lm = ctx.panel.querySelector('#lm'), rm = ctx.panel.querySelector('#rm');
-    const st = { l: 0, r: 0 };
+      <div class="motors" dir="ltr">${slider('lm', 'leftMotor')}<div class="mbot">${ROBOT_FACE}</div>${slider('rm', 'rightMotor')}</div>
+      <label class="link"><input type="checkbox" id="link" ${linkedByDefault ? 'checked' : ''}> ${t('linkMotors')}</label>
+      <div class="explain" id="explain"></div>
+      <div class="row"><button class="btn run big" id="goM">${t('go')}</button><button class="btn" id="resetB">${t('resetBot')}</button></div>`;
+    const q = (sel) => ctx.panel.querySelector(sel);
+    const lm = q('#lm'), rm = q('#rm'), link = q('#link'), goB = q('#goM');
+    const st = { l: 0, r: 0, running: false };
     const upd = () => {
       st.l = +lm.value; st.r = +rm.value;
-      ctx.panel.querySelector('#lv').textContent = st.l;
-      ctx.panel.querySelector('#rv').textContent = st.r;
-      ctx.panel.querySelector('#explain').textContent = t(motorState(st.l, st.r));
+      q('#lmv').textContent = st.l; q('#rmv').textContent = st.r;
+      const what = t(motorState(st.l, st.r));
+      q('#explain').textContent = st.running || (!st.l && !st.r) ? what : t('ready') + ' ' + what;
+      goB.textContent = st.running ? t('stopGo') : t('go');
+      goB.classList.toggle('stop', st.running);
     };
-    lm.oninput = upd; rm.oninput = upd;
-    st.stop = () => { lm.value = 0; rm.value = 0; upd(); };
-    ctx.panel.querySelector('#stopM').onclick = () => st.stop();
+    const setFrom = (src) => { if (link.checked) (src === lm ? rm : lm).value = src.value; upd(); };
+    lm.oninput = () => setFrom(lm); rm.oninput = () => setFrom(rm);
+    ctx.panel.querySelectorAll('.pmb').forEach((b) => (b.onclick = () => {
+      const el = q('#' + b.dataset.for);
+      el.value = clamp(+el.value + +b.dataset.d, -100, 100);
+      setFrom(el); ctx.sfx.tap();
+    }));
+    link.onchange = () => { if (link.checked) { rm.value = lm.value; upd(); } };
+    st.halt = () => { st.running = false; upd(); };
+    st.stop = () => { lm.value = 0; rm.value = 0; st.running = false; upd(); };
+    goB.onclick = () => { st.running = !st.running; ctx.setMsg(''); upd(); };
     st.onReset = null;
-    ctx.panel.querySelector('#resetB').onclick = () => { st.stop(); st.onReset && st.onReset(); };
+    q('#resetB').onclick = () => { st.halt(); st.onReset && st.onReset(); ctx.setMsg(''); };
+    upd();
     return st;
   }
 
@@ -239,7 +249,7 @@ const Sim = (() => {
     const { t } = ctx;
     const cv = makeCanvas(ctx.stage);
     const g = cv.g;
-    const mp = motorPanel(ctx);
+    const mp = motorPanel(ctx, m.variant === 'straight');
     const SPEED = 1.3; // px/s per motor unit
     let bot, walls = [], zone = null, lanterns = [], litIdx = 0, hold = 0, bumpT = 0, done = false;
     const center = { x: 400, y: 260, r: 46 };
@@ -256,29 +266,30 @@ const Sim = (() => {
     debug.get = () => bot;
     const stop = loop((dt) => {
       if (done) { draw(); return; }
-      bot.L = mp.l * SPEED; bot.R = mp.r * SPEED;
+      bot.L = mp.running ? mp.l * SPEED : 0; bot.R = mp.running ? mp.r * SPEED : 0;
       for (let i = 0; i < 4; i++) {
         const px = bot.x, py = bot.y;
         bot.step(dt / 4);
         if (hitsWall(bot, walls)) {
           bot.x = px; bot.y = py;
-          if (bumpT <= 0) { ctx.sfx.bad(); ctx.mistake(); ctx.setMsg(t('bump'), 'bad'); }
-          bumpT = 0.8;
+          // stop on a bump so one crash counts as one mistake
+          ctx.sfx.bad(); ctx.mistake(); ctx.setMsg(t('bump'), 'bad'); mp.halt();
+          break;
         }
       }
       bumpT -= dt;
       if (m.variant === 'spin') {
         if (Math.hypot(bot.x - center.x, bot.y - center.y) > center.r) {
           ctx.sfx.bad(); ctx.mistake(); ctx.setMsg(t('leftCircle'), 'bad');
-          mp.stop(); bot.x = center.x; bot.y = center.y;
+          mp.halt(); bot.x = center.x; bot.y = center.y;
         }
         const target = lanterns[litIdx];
         if (target) {
           const diff = Math.abs(wrap(bot.th - target.a));
           hold = diff < rad(9) ? hold + dt : 0;
-          if (hold > 0.5) { target.lit = true; litIdx++; hold = 0; ctx.sfx.good(); if (litIdx === lanterns.length) { done = true; mp.stop(); ctx.win(); } }
+          if (hold > 0.5) { target.lit = true; litIdx++; hold = 0; ctx.sfx.good(); if (litIdx === lanterns.length) { done = true; mp.halt(); ctx.win(); } }
         }
-      } else if (Math.hypot(bot.x - zone.x, bot.y - zone.y) < zone.r - 6 && !mp.l && !mp.r) {
+      } else if (Math.hypot(bot.x - zone.x, bot.y - zone.y) < zone.r - 6 && (!mp.running || (!mp.l && !mp.r))) {
         done = true; ctx.win();
       }
       draw();
@@ -307,7 +318,7 @@ const Sim = (() => {
         g.beginPath(); g.moveTo(p.x, p.y); const q = bot.pt(170, 0); g.lineTo(q.x, q.y); g.stroke(); g.setLineDash([]);
         if (hold > 0) { g.strokeStyle = '#F59E0B'; g.lineWidth = 5; g.beginPath(); g.arc(bot.x, bot.y, 32, -Math.PI / 2, -Math.PI / 2 + (hold / 0.5) * TAU); g.stroke(); }
       }
-      drawBot(g, bot, { showPower: true, powerL: mp.l, powerR: mp.r });
+      drawBot(g, bot, { showPower: mp.running, powerL: mp.l, powerR: mp.r });
     }
     ctx.onCleanup(stop);
     if (m.variant === 'spin') ctx.setMsg(t('holdAim'), 'hint');
@@ -417,6 +428,9 @@ const Sim = (() => {
     function renderPanel() {
       const r = rounds[ri];
       const ratio = drn / drv;
+      // speed needed to finish inside the time limit
+      const needSpd = (BASE_TIME * (1 + r.slope / 60)) / r.limit;
+      const okStr = ratio >= r.need - 1e-9, okSpd = 1 / ratio >= needSpd - 1e-9;
       ctx.panel.innerHTML = `
         <div class="round"><b>${t('round', { n: ri + 1, m: rounds.length })}: ${r.icon} ${L(r.name)}</b><p>${L(r.desc)}</p></div>
         <label class="lbl">${t('motorGear')}</label>
@@ -424,13 +438,22 @@ const Sim = (() => {
         <label class="lbl">${t('wheelGear')}</label>
         <div class="choices" id="drn">${[8, 16, 24, 40].map((n) => `<button class="choice${n === drn ? ' on' : ''}" data-n="${n}">${t('teeth', { n })}</button>`).join('')}</div>
         <div class="monitor"><h4>${t('ratio')}: ${drn} ÷ ${drv} = <b>${+ratio.toFixed(2)}</b></h4>
+          <p class="gear-say">${gearSentence(ratio)}</p>
           <div class="bar"><span>${t('strength')}</span><i style="--v:${Math.min(100, ratio * 20)}%;--c:#DC2626"></i><b>×${+ratio.toFixed(2)}</b></div>
           <div class="bar"><span>${t('speed')}</span><i style="--v:${Math.min(100, (1 / ratio) * 20)}%;--c:#2563EB"></i><b>×${+(1 / ratio).toFixed(2)}</b></div>
         </div>
+        <div class="needs"><b>${t('needs')}</b>
+          <span class="${okStr ? 'ok' : 'no'}">${okStr ? '✅' : '❌'} 💪 ${t('strength')} ≥ ×${r.need}</span>
+          <span class="${okSpd ? 'ok' : 'no'}">${okSpd ? '✅' : '❌'} ⚡ ${t('speed')} ≥ ×${+needSpd.toFixed(2)}</span></div>
         <button class="btn run" id="test">${t('test')}</button>`;
       ctx.panel.querySelectorAll('#drv .choice').forEach((b) => (b.onclick = () => { if (anim) return; drv = +b.dataset.n; ctx.sfx.tap(); renderPanel(); }));
       ctx.panel.querySelectorAll('#drn .choice').forEach((b) => (b.onclick = () => { if (anim) return; drn = +b.dataset.n; ctx.sfx.tap(); renderPanel(); }));
       ctx.panel.querySelector('#test').onclick = test;
+    }
+    function gearSentence(ratio) {
+      const n = +(ratio >= 1 ? ratio : 1 / ratio).toFixed(2);
+      if (Math.abs(ratio - 1) < 1e-9) return t('gearSame');
+      return ratio > 1 ? t('gearStrong', { n }) : t('gearFast', { n });
     }
     function test() {
       if (anim) return;
@@ -490,7 +513,7 @@ const Sim = (() => {
       gear(gx, y, drv, angle, '#F26A1B');
       gear(gx + r1 + r2 + 4, y, drn, -angle * (drv / drn) + Math.PI / drn, '#0EA5A4');
       g.fillStyle = '#0A0D14'; g.font = 'bold 14px system-ui'; g.textAlign = 'center';
-      g.fillText('⚡ ' + t('motorGear').split('(')[0].trim(), gx, y + r1 + 28);
+      g.fillText('⚡ ' + t('motorGear').split('(')[0].trim(), gx, y - r1 - 16);
       g.fillText('🛞 ' + t('wheelGear'), gx + r1 + r2 + 4, y + r2 + 28);
       // track (bottom)
       const r = rounds[ri];

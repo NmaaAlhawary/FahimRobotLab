@@ -15,6 +15,7 @@ const STRINGS = {
     pickPart: 'Tap a part, then tap the box where it belongs.',
     wrongBin: 'Not quite. Ask yourself: does it collect information, decide, do something, or give energy?',
     // motors
+    go: '▶ Go', stopGo: '■ Stop', linkMotors: '🔗 Same speed for both motors', ready: 'Ready! Press ▶ Go.',
     leftMotor: 'Left motor', rightMotor: 'Right motor', stopMotors: '■ Stop motors', resetBot: '↺ Reset robot',
     st_stop: 'Fahim is stopped.', st_fwd: 'Both wheels forward at the same speed → straight ahead.',
     st_back: 'Both wheels backward → reversing.', st_spinL: 'Wheels in opposite directions → spinning left on the spot.',
@@ -27,7 +28,11 @@ const STRINGS = {
     // servo
     servoAngle: 'Servo angle', fire: '🎯 Launch', servoNow: 'Servo is at {a}° → going to {b}°', miss: 'Missed! Read the angle on the protractor and try again.',
     // gears
-    motorGear: 'Motor gear (small engine side)', wheelGear: 'Wheel gear', teeth: '{n} teeth', ratio: 'Gear ratio',
+    motorGear: 'Motor gear (turned by the motor)', wheelGear: 'Wheel gear', teeth: '{n} teeth', ratio: 'Gear ratio',
+    needs: 'This round needs:',
+    gearStrong: 'The motor turns {n} times → the wheel turns 1 time. Slower, but {n}× stronger 💪',
+    gearFast: 'The motor turns 1 time → the wheel turns {n} times. {n}× faster ⚡, but weaker',
+    gearSame: 'Same size gears: the wheel turns exactly like the motor. Normal speed, normal strength.',
     speed: 'Speed', strength: 'Strength', test: '▶ Test drive', notStrong: 'Too weak! The car could not climb. Try a gear that gives more strength.',
     tooSlow: 'Too slow! Time {s}s, limit {l}s. Try a gear that gives more speed.', timeLbl: 'Time: {s}s',
     // distance
@@ -57,6 +62,7 @@ const STRINGS = {
     senseD: 'الحساسات: المدخلات', thinkD: 'الدماغ', actD: 'المخرجات', powerD: 'الطاقة',
     pickPart: 'اضغط على قطعة، ثم اضغط على الصندوق المناسب لها.',
     wrongBin: 'ليس تمامًا. اسأل نفسك: هل تجمع معلومات، أم تقرّر، أم تفعل شيئًا، أم تعطي طاقة؟',
+    go: '▶ انطلق', stopGo: '■ توقّف', linkMotors: '🔗 نفس السرعة للمحركين', ready: 'جاهز! اضغط ▶ انطلق.',
     leftMotor: 'المحرك الأيسر', rightMotor: 'المحرك الأيمن', stopMotors: '■ أوقف المحركات', resetBot: '↺ أعد الروبوت',
     st_stop: 'فهيم متوقف.', st_fwd: 'العجلتان للأمام بنفس السرعة ← إلى الأمام مباشرة.',
     st_back: 'العجلتان للخلف ← يرجع للخلف.', st_spinL: 'العجلتان باتجاهين متعاكسين ← يدور يسارًا في مكانه.',
@@ -68,6 +74,10 @@ const STRINGS = {
     stopHere: 'توقّف هنا', holdAim: 'وجّه الأنف البرتقالي نحو الفانوس المضيء…',
     servoAngle: 'زاوية السيرفو', fire: '🎯 أطلق', servoNow: 'السيرفو عند {a}° ← يتجه إلى {b}°', miss: 'أخطأت! اقرأ الزاوية على المنقلة وحاول مجددًا.',
     motorGear: 'ترس المحرك', wheelGear: 'ترس العجلة', teeth: '{n} سنًّا', ratio: 'نسبة التروس',
+    needs: 'هذه الجولة تحتاج:',
+    gearStrong: 'المحرك يدور {n} مرات ← العجلة تدور مرة واحدة. أبطأ، لكن أقوى {n} مرات 💪',
+    gearFast: 'المحرك يدور مرة واحدة ← العجلة تدور {n} مرات. أسرع {n} مرات ⚡، لكن أضعف',
+    gearSame: 'ترسان بنفس الحجم: العجلة تدور مثل المحرك تمامًا. سرعة عادية وقوة عادية.',
     speed: 'السرعة', strength: 'القوة', test: '▶ جرّب القيادة', notStrong: 'ضعيف جدًا! لم تستطع السيارة الصعود. جرّب تروسًا تعطي قوة أكبر.',
     tooSlow: 'بطيء جدًا! الزمن {s} ث، والحد {l} ث. جرّب تروسًا تعطي سرعة أكبر.', timeLbl: 'الزمن: {s} ث',
     ifDist: 'إذا كانت المسافة <', thenStop: 'سم عندها توقّف', thenTurn: 'سم عندها استدر 90°', left: 'يسارًا', right: 'يمينًا',
@@ -211,14 +221,14 @@ const MISSIONS = [
   {
     id: 'm1', chapter: 'motors', type: 'drive', variant: 'straight',
     title: { en: 'Straight Line', ar: 'خط مستقيم' },
-    goal: { en: 'Set both motors to drive Fahim into the green zone, then STOP the motors inside it.', ar: 'اضبط المحركين لتقود فهيم إلى المنطقة الخضراء، ثم أوقف المحركين داخلها.' },
-    hint: { en: 'Give both motors the same positive number. When Fahim is in the zone, press "Stop motors".', ar: 'أعطِ المحركين نفس الرقم الموجب. عندما يدخل فهيم المنطقة اضغط «أوقف المحركات».' },
+    goal: { en: 'Set the motor power, press ▶ Go, and press ■ Stop when Fahim is inside the green zone.', ar: 'اضبط قوة المحركين، اضغط ▶ انطلق، ثم اضغط ■ توقّف عندما يدخل فهيم المنطقة الخضراء.' },
+    hint: { en: 'Keep 🔗 on so both motors get the same number, like 50. Start slow so it is easy to stop in time!', ar: 'أبقِ 🔗 مفعّلًا ليأخذ المحركان نفس الرقم، مثل 50. ابدأ ببطء ليسهل التوقف في الوقت المناسب!' },
   },
   {
     id: 'm2', chapter: 'motors', type: 'drive', variant: 'curve',
     title: { en: 'Around the Wall', ar: 'حول الجدار' },
     goal: { en: 'The wall is in the way! Steer around it by giving the wheels different speeds, and stop in the green zone.', ar: 'الجدار في الطريق! التفّ حوله بإعطاء العجلتين سرعتين مختلفتين، وتوقّف في المنطقة الخضراء.' },
-    hint: { en: 'Right motor faster = curve left. Left motor faster = curve right. Make small changes while Fahim drives.', ar: 'المحرك الأيمن أسرع = انعطاف يسارًا. الأيسر أسرع = انعطاف يمينًا. غيّر قليلًا أثناء القيادة.' },
+    hint: { en: 'Right motor faster = curve left. Left motor faster = curve right. You can move the sliders while Fahim drives, or press ■ Stop, change them, and press ▶ Go again.', ar: 'المحرك الأيمن أسرع = انعطاف يسارًا. الأيسر أسرع = انعطاف يمينًا. يمكنك تحريك المؤشرات أثناء القيادة، أو اضغط ■ توقّف وغيّرها ثم اضغط ▶ انطلق من جديد.' },
   },
   {
     id: 'm3', chapter: 'motors', type: 'drive', variant: 'spin',
